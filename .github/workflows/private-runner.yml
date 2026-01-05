@@ -1,36 +1,84 @@
-# This is a basic workflow to help you get started with Actions
+name: GCP Private Ubuntu Runner (On Demand)
 
-name: CI
-
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the "main" branch
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The type of runner that the job will run on
+  start_runner_vm:
     runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v4
+      - name: Auth to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
 
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
 
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
+      - name: Create GitHub runner registration token
+        id: regtoken
         run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+          TOKEN=$(curl -sS -X POST \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runners/registration-token" \
+            | jq -r .token)
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Update VM metadata (github_url + runner_token)
+        run: |
+          gcloud compute instances add-metadata "${{ secrets.RUNNER_INSTANCE_NAME }}" \
+            --project "${{ secrets.GCP_PROJECT_ID }}" \
+            --zone "${{ secrets.GCP_ZONE }}" \
+            --metadata=github_url="https://github.com/${{ github.repository }}",runner_token="${{ steps.regtoken.outputs.token }}"
+
+      - name: Start VM
+        run: |
+          gcloud compute instances start "${{ secrets.RUNNER_INSTANCE_NAME }}" \
+            --project "${{ secrets.GCP_PROJECT_ID }}" \
+            --zone "${{ secrets.GCP_ZONE }}"
+
+  run_job_on_private_runner:
+    needs: start_runner_vm
+    runs-on: [self-hosted, private, ubuntu, linux, gcp]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify runner
+        run: |
+          echo "Hello from private runner"
+          hostname
+          uname -a
+
+      - name: Start application / job
+        run: |
+          echo "Start your application here"
+          # Example:
+          # docker compose up -d
+          # ./start-app.sh
+
+      - name: Main job
+        run: |
+          echo "Running main job..."
+          sleep 15
+          echo "Job completed."
+
+  stop_runner_vm:
+    if: always()
+    needs: run_job_on_private_runner
+    runs-on: ubuntu-latest
+    steps:
+      - name: Auth to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Stop VM (safety cleanup)
+        run: |
+          gcloud compute instances stop "${{ secrets.RUNNER_INSTANCE_NAME }}" \
+            --project "${{ secrets.GCP_PROJECT_ID }}" \
+            --zone "${{ secrets.GCP_ZONE }}"
