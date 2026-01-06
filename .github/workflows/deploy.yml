@@ -6,68 +6,55 @@ on:
       - main
 
 jobs:
-  deploy:
-    # ====================================================
-    # JOB TIMEOUT
-    # Purpose:
-    # - Prevent infinite waiting for runner
-    # - Auto-cancel job if runner not picked or hangs
-    # ====================================================
-    timeout-minutes: 15
+  name: Deploy GitHub Runner on GCP
 
-    # ====================================================
-    # RUNNER SELECTION
-    # Must match labels registered in startup.sh
-    # ====================================================
-    runs-on: [self-hosted, gcp]
+  on:
+    workflow_dispatch:
+      inputs:
+        runner_token:
+          description: 'Optional runner token (falls back to secret RUNNER_TOKEN)'
+          required: false
+          default: ''
 
-    steps:
+  jobs:
+    terraform:
+      runs-on: ubuntu-latest
+      permissions:
+        contents: read
+        id-token: write
 
-      # ====================================================
-      # STEP 1: PIPELINE START CONFIRMATION
-      # ====================================================
-      - name: STEP 1 - Pipeline Started
-        run: |
-          echo "===================================="
-          echo "$(date) : Pipeline started"
-          echo "Runner Hostname: $(hostname)"
-          echo "Runner User: $(whoami)"
-          echo "===================================="
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v4
 
+        - name: Setup Google Cloud SDK
+          uses: google-github-actions/setup-gcloud@v1
+          with:
+            service_account_key: ${{ secrets.GCP_CREDENTIALS }}
+            project_id: my-learning-terraform-482905
 
-      # ====================================================
-      # STEP 2: CHECKOUT SOURCE CODE
-      # ====================================================
-      - name: STEP 2 - Checkout Repository
-        uses: actions/checkout@v4
+        - name: Install Terraform
+          uses: hashicorp/setup-terraform@v2
+          with:
+            terraform_version: 1.5.7
 
+        - name: Configure runner token
+          run: |
+            if [ -n "${{ github.event.inputs.runner_token }}" ]; then
+              echo "TF_VAR_runner_token=${{ github.event.inputs.runner_token }}" >> $GITHUB_ENV
+            else
+              echo "TF_VAR_runner_token=${{ secrets.RUNNER_TOKEN }}" >> $GITHUB_ENV
+            fi
 
-      # ====================================================
-      # STEP 3: DEPLOY APPLICATION
-      # ====================================================
-      - name: STEP 3 - Deploy Application (NGINX)
-        run: |
-          echo "$(date) : Restarting NGINX"
-          sudo systemctl restart nginx
-          sudo systemctl status nginx
+        - name: Terraform Init
+          working-directory: .
+          run: terraform init -input=false
 
+        - name: Terraform Plan
+          working-directory: .
+          run: terraform plan -input=false
 
-      # ====================================================
-      # STEP 4: VERIFY APPLICATION
-      # ====================================================
-      - name: STEP 4 - Verify Application
-        run: |
-          echo "$(date) : Verifying NGINX response"
-          curl -I http://localhost
-
-
-      # ====================================================
-      # STEP 5: SHUTDOWN VM (COST SAVING)
-      # ====================================================
-      - name: STEP 5 - Shutdown Runner VM
-        run: |
-          echo "===================================="
-          echo "$(date) : Pipeline completed successfully"
-          echo "$(date) : Shutting down VM"
-          echo "===================================="
-          sudo shutdown -h now
+        - name: Terraform Apply
+          if: github.event.inputs.runner_token != '' || secrets.RUNNER_TOKEN != ''
+          working-directory: .
+          run: terraform apply -auto-approve -input=false

@@ -5,7 +5,7 @@ resource "google_compute_instance" "github_runner" {
 
   boot_disk {
     initialize_params {
-      image = "ubuntu-2204-lts"
+      image = "projects/ubuntu-os-cloud/global/images/family/ubuntu-2204-lts"
       size  = 20
     }
   }
@@ -16,7 +16,7 @@ resource "google_compute_instance" "github_runner" {
   }
 
   metadata = {
-    startup-script = templatefile("${path.module}/../scripts/startup.sh", {
+    startup-script = templatefile("${path.module}/../../scripts/startup.sh", {
       github_owner = var.github_owner
       github_repo  = var.github_repo
       runner_token = var.runner_token
@@ -29,3 +29,4 @@ resource "google_compute_instance" "github_runner" {
     scopes = ["cloud-platform"]
   }
 }
+

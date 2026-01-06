@@ -6,7 +6,16 @@ set -euxo pipefail
 # Purpose: Capture all startup activity
 # ====================================================
 LOG_FILE="/var/log/github-runner-startup.log"
-exec > >(tee -a ${LOG_FILE}) 2>&1
+echo "$(date) : STEP 7 - STARTUP COMPLETE"
+#!/bin/bash
+set -euxo pipefail
+
+# ====================================================
+# STEP 0: LOG SETUP
+# Purpose: Capture all startup activity
+# ====================================================
+LOG_FILE="/var/log/github-runner-startup.log"
+exec > >(tee -a $${LOG_FILE}) 2>&1
 
 echo "================================================="
 echo "$(date) : STEP 0 - VM BOOT & STARTUP SCRIPT STARTED"
@@ -39,11 +48,11 @@ cd /actions-runner
 # ====================================================
 echo "$(date) : STEP 3 - Fetching latest runner version"
 RUNNER_VERSION=$(curl -s https://api.github.com/repos/actions/runner/releases/latest | jq -r .tag_name)
-echo "$(date) : Runner version: ${RUNNER_VERSION}"
+echo "$(date) : Runner version: $${RUNNER_VERSION}"
 
 echo "$(date) : Downloading runner binary"
 curl -L -o runner.tar.gz \
-https://github.com/actions/runner/releases/download/${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz
+  https://github.com/actions/runner/releases/download/$${RUNNER_VERSION}/actions-runner-linux-x64-$${RUNNER_VERSION}.tar.gz
 
 echo "$(date) : Extracting runner"
 tar xzf runner.tar.gz
