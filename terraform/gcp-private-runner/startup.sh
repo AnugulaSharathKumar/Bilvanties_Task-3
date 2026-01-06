@@ -35,7 +35,7 @@ RUNNER_NAME="runner-$(hostname)-$(date +%s)"
   --ephemeral
 
 # Run exactly one job, then exit
-./run.sh || once
+./run.sh  --once
 
 # Shutdown the VM after job completes
 shutdown -h now
