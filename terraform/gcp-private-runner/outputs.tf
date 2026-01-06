@@ -1,15 +1,3 @@
-
-output "instance_name" {
-  description = "Runner instance name"
-  value       = google_compute_instance.runner.name
-}
-
-output "zone" {
-  description = "Zone where the runner instance is created"
-  value       = google_compute_instance.runner.zone
-}
-
-output "github_url" {
-  description = "GitHub repository URL used by the runner"
-  value       = "https://github.com/${var.repo_owner}/${var.repo_name}"
+output "runner_private_ip" {
+  value = google_compute_instance.github_runner.network_interface[0].network_ip
 }

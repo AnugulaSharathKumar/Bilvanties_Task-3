@@ -1,0 +1,23 @@
+name: GCP Self Hosted Runner Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Deploy Application (NGINX)
+        run: |
+          echo "Deploying application..."
+          sudo systemctl restart nginx
+
+      - name: Stop GCP Runner VM
+        run: |
+          sudo shutdown -h now
