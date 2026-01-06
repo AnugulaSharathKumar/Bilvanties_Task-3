@@ -9,6 +9,8 @@ permissions:
 jobs:
   start_runner_vm:
     runs-on: ubuntu-latest
+    outputs:
+      runner_token: ${{ steps.regtoken.outputs.token }}
     steps:
       - name: Auth to GCP
         uses: google-github-actions/auth@v2
@@ -21,7 +23,8 @@ jobs:
       - name: Create GitHub runner registration token
         id: regtoken
         run: |
-          TOKEN=$(curl -s -X POST \
+          set -euo pipefail
+          TOKEN=$(curl -fsS -X POST \
             -H "Authorization: Bearer ${{ secrets.MY_TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/${{ github.repository }}/actions/runners/registration-token \
@@ -30,20 +33,39 @@ jobs:
             echo "Failed to get registration token" >&2
             exit 1
           fi
-          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
 
       - name: Update VM metadata (github_url + runner_token)
         run: |
           gcloud compute instances add-metadata "${{ secrets.RUNNER_INSTANCE_NAME }}" \
             --project "${{ secrets.GCP_PROJECT_ID }}" \
             --zone "${{ secrets.GCP_ZONE }}" \
-            --metadata=github_url="https://github.com/${{ github.repository }}",runner_token="${{ steps.regtoken.outputs.token }}"
+            --metadata=github_url="https://github.com/${{ github.repository }}",runner_token="${{ steps.regtoken.outputs.token }}" \
+            --quiet
 
       - name: Start VM
         run: |
           gcloud compute instances start "${{ secrets.RUNNER_INSTANCE_NAME }}" \
             --project "${{ secrets.GCP_PROJECT_ID }}" \
-            --zone "${{ secrets.GCP_ZONE }}"
+            --zone "${{ secrets.GCP_ZONE }}" \
+            --quiet
+
+      - name: Wait for runner to register
+        run: |
+          echo "Waiting for private runner to register..."
+          for i in {1..12}; do
+            RUNNERS=$(curl -fsS -H "Authorization: Bearer ${{ secrets.MY_TOKEN }}" \
+              -H "Accept: application/vnd.github+json" \
+              https://api.github.com/repos/${{ github.repository }}/actions/runners | jq '.runners | length')
+            if [ "$RUNNERS" -gt 0 ]; then
+              echo "Runner is registered!"
+              exit 0
+            fi
+            echo "Waiting 5 seconds..."
+            sleep 5
+          done
+          echo "Runner failed to register in time." >&2
+          exit 1
 
   run_job_on_private_runner:
     needs: start_runner_vm
@@ -60,7 +82,7 @@ jobs:
 
       - name: Start application / job
         run: |
-          echo "Start your application here"
+          echo "Starting application..."
           # Example:
           # docker compose up -d
           # ./start-app.sh
@@ -88,4 +110,5 @@ jobs:
         run: |
           gcloud compute instances stop "${{ secrets.RUNNER_INSTANCE_NAME }}" \
             --project "${{ secrets.GCP_PROJECT_ID }}" \
-            --zone "${{ secrets.GCP_ZONE }}"
+            --zone "${{ secrets.GCP_ZONE }}" \
+            --quiet
