@@ -26,12 +26,14 @@ HDR="Metadata-Flavor: Google"
 GITHUB_URL="$(curl -fsS -H "$HDR" "${META}/github_url" 2>/dev/null || true)"
 RUNNER_TOKEN="$(curl -fsS -H "$HDR" "${META}/runner_token" 2>/dev/null || true)"
 
-# fallback to configured values if metadata not set (note: avoid committing secrets to repo)
+# Require metadata values; fail fast to avoid accidental use of hard-coded tokens
 if [ -z "${GITHUB_URL}" ]; then
-  GITHUB_URL="https://github.com/AnugulaSharathKumar/Bilvanties_Task-3"
+  echo "ERROR: github_url metadata is missing. Provide it via instance metadata or var.github_repo." >&2
+  exit 1
 fi
 if [ -z "${RUNNER_TOKEN}" ]; then
-  RUNNER_TOKEN="AV2UD2EWN22VL3XBHWJ3PZ3JLTOTM"
+  echo "ERROR: runner_token metadata is missing. Provide a registration token via instance metadata or var.runner_token." >&2
+  exit 1
 fi
 
 RUNNER_NAME="runner-$(hostname)-$(date +%s)"
