@@ -1,6 +1,6 @@
 variable "project_id" {
   type        = string
-  default     = "my-gcp-project"
+  default     = "my-learning-terraform-482905"
   description = "GCP Project ID where resources will be created"
 }
 variable "region" {

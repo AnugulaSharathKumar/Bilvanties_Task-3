@@ -1,0 +1,62 @@
+name: Start runner and execute job
+
+on:
+  push:
+  workflow_dispatch:
+
+env:
+  INSTANCE_NAME: private-runner-instance
+  ZONE: us-central1-a
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+
+jobs:
+  start-runner:
+    runs-on: ubuntu-latest
+    outputs:
+      started: ${{ steps.start-instance.outcome }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Get runner registration token
+        id: reg
+        run: |
+          set -euo pipefail
+          TOKEN=$(curl -s -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/actions/runners/registration-token \
+            | jq -r .token)
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "Failed to get registration token" >&2
+            exit 1
+          fi
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Add registration token metadata to VM
+        run: |
+          gcloud compute instances add-metadata "$INSTANCE_NAME" \
+            --metadata "runner_token=${{ steps.reg.outputs.token }},github_url=https://github.com/${{ github.repository }}" \
+            --zone "$ZONE" --project "$PROJECT_ID"
+
+      - name: Start instance
+        id: start-instance
+        run: |
+          gcloud compute instances start "$INSTANCE_NAME" --zone "$ZONE" --project "$PROJECT_ID"
+
+  run-on-self-hosted:
+    needs: start-runner
+    runs-on: [self-hosted, linux, private]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Example job step
+        run: |
+          echo "Job is running on self-hosted runner $(hostname)"
+          # Put your build/test/deploy steps here

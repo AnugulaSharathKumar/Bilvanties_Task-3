@@ -42,13 +42,16 @@ resource "google_compute_instance" "runner" {
   metadata_startup_script = file("${path.module}/startup.sh")
 
   metadata = {
-    github_url   = "https://github.com/${var.github_repo}"
+    github_url   = var.github_repo
     runner_token = "will-be-overwritten-by-pipeline"
   }
 
   scheduling {
+    # For E2 machine types, on_host_maintenance must be "MIGRATE" unless
+    # the instance is preemptible. Change to MIGRATE to avoid the 400 error
+    # or set `scheduling.preemptible = true` if you want TERMINATE behavior.
     automatic_restart   = false
-    on_host_maintenance = "TERMINATE"
+    on_host_maintenance = "MIGRATE"
   }
 
   tags = ["runner"]
