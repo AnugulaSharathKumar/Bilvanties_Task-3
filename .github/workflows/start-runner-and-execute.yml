@@ -27,10 +27,37 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Authenticate to GCP
+      - name: Verify GCP auth inputs
+        run: |
+          if [ -z "${{ secrets.GCP_WORKLOAD_ID_PROVIDER }}" ] && [ -z "${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}" ]; then
+            echo "No GCP auth inputs configured. Configure either GCP_WORKLOAD_ID_PROVIDER+GCP_SERVICE_ACCOUNT_EMAIL (OIDC) or GCP_SERVICE_ACCOUNT_KEY (service account JSON) in repository secrets." >&2
+            exit 1
+          fi
+
+      - name: Authenticate to GCP (OIDC)
+        if: ${{ secrets.GCP_WORKLOAD_ID_PROVIDER != '' && secrets.GCP_SERVICE_ACCOUNT_EMAIL != '' }}
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_ID_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+          create_credentials_file: true
+          export_environment_variables: true
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
+          access_token_lifetime: 3600s
+          cleanup_credentials: true
+          universe: googleapis.com
+
+      - name: Authenticate to GCP (service account key)
+        if: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY != '' }}
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+          create_credentials_file: true
+          export_environment_variables: true
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
+          access_token_lifetime: 3600s
+          cleanup_credentials: true
+          universe: googleapis.com
 
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
@@ -124,10 +151,37 @@ jobs:
     needs: run-on-self-hosted
     runs-on: ubuntu-latest
     steps:
-      - name: Authenticate to GCP
+      - name: Verify GCP auth inputs
+        run: |
+          if [ -z "${{ secrets.GCP_WORKLOAD_ID_PROVIDER }}" ] && [ -z "${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}" ]; then
+            echo "No GCP auth inputs configured. Configure either GCP_WORKLOAD_ID_PROVIDER+GCP_SERVICE_ACCOUNT_EMAIL (OIDC) or GCP_SERVICE_ACCOUNT_KEY (service account JSON) in repository secrets." >&2
+            exit 1
+          fi
+
+      - name: Authenticate to GCP (OIDC)
+        if: ${{ secrets.GCP_WORKLOAD_ID_PROVIDER != '' && secrets.GCP_SERVICE_ACCOUNT_EMAIL != '' }}
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_ID_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+          create_credentials_file: true
+          export_environment_variables: true
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
+          access_token_lifetime: 3600s
+          cleanup_credentials: true
+          universe: googleapis.com
+
+      - name: Authenticate to GCP (service account key)
+        if: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY != '' }}
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+          create_credentials_file: true
+          export_environment_variables: true
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
+          access_token_lifetime: 3600s
+          cleanup_credentials: true
+          universe: googleapis.com
 
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2

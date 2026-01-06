@@ -24,14 +24,32 @@ jobs:
         uses: actions/checkout@v4
 
       # Auth to Google Cloud via OIDC Workload Identity Federation
+      - name: Verify GCP auth inputs
+        run: |
+          # Fail early with a clear message if neither OIDC nor service account key is available.
+          if [ -z "${{ secrets.GCP_WORKLOAD_ID_PROVIDER }}" ] && [ -z "${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}" ]; then
+            echo "No GCP auth inputs configured. Configure either GCP_WORKLOAD_ID_PROVIDER + GCP_SERVICE_ACCOUNT_EMAIL (OIDC) or GCP_SERVICE_ACCOUNT_KEY (service account JSON) in repository secrets." >&2
+            exit 1
+          fi
+
       - name: Authenticate to GCP (OIDC)
+        if: ${{ secrets.GCP_WORKLOAD_ID_PROVIDER != '' && secrets.GCP_SERVICE_ACCOUNT_EMAIL != '' }}
         uses: google-github-actions/auth@v2
         with:
-          # MUST specify exactly one of the below, we use WIF:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_ID_PROVIDER }}  # e.g. projects/123456789/locations/global/workloadIdentityPools/github-actions/providers/github-oidc
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}            # e.g. gh-actions@YOUR_PROJECT_ID.iam.gserviceaccount.com
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_ID_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+          create_credentials_file: true
+          export_environment_variables: true
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
+          access_token_lifetime: 3600s
+          cleanup_credentials: true
+          universe: googleapis.com
 
-          # helpful options
+      - name: Authenticate to GCP (service account key)
+        if: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY != '' }}
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
           create_credentials_file: true
           export_environment_variables: true
           access_token_scopes: https://www.googleapis.com/auth/cloud-platform
@@ -56,7 +74,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Verify GCP auth inputs
+        run: |
+          if [ -z "${{ secrets.GCP_WORKLOAD_ID_PROVIDER }}" ] && [ -z "${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}" ]; then
+            echo "No GCP auth inputs configured. Configure GCP_WORKLOAD_ID_PROVIDER+GCP_SERVICE_ACCOUNT_EMAIL or GCP_SERVICE_ACCOUNT_KEY." >&2
+            exit 1
+          fi
+
       - name: Authenticate to GCP (OIDC)
+        if: ${{ secrets.GCP_WORKLOAD_ID_PROVIDER != '' && secrets.GCP_SERVICE_ACCOUNT_EMAIL != '' }}
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_ID_PROVIDER }}
@@ -64,6 +90,21 @@ jobs:
           create_credentials_file: true
           export_environment_variables: true
           access_token_scopes: https://www.googleapis.com/auth/cloud-platform
+          access_token_lifetime: 3600s
+          cleanup_credentials: true
+          universe: googleapis.com
+
+      - name: Authenticate to GCP (service account key)
+        if: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY != '' }}
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+          create_credentials_file: true
+          export_environment_variables: true
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
+          access_token_lifetime: 3600s
+          cleanup_credentials: true
+          universe: googleapis.com
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -109,7 +150,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Verify GCP auth inputs
+        run: |
+          if [ -z "${{ secrets.GCP_WORKLOAD_ID_PROVIDER }}" ] && [ -z "${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}" ]; then
+            echo "No GCP auth inputs configured. Configure GCP_WORKLOAD_ID_PROVIDER+GCP_SERVICE_ACCOUNT_EMAIL or GCP_SERVICE_ACCOUNT_KEY." >&2
+            exit 1
+          fi
+
       - name: Authenticate to GCP (OIDC)
+        if: ${{ secrets.GCP_WORKLOAD_ID_PROVIDER != '' && secrets.GCP_SERVICE_ACCOUNT_EMAIL != '' }}
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_ID_PROVIDER }}
@@ -117,6 +166,21 @@ jobs:
           create_credentials_file: true
           export_environment_variables: true
           access_token_scopes: https://www.googleapis.com/auth/cloud-platform
+          access_token_lifetime: 3600s
+          cleanup_credentials: true
+          universe: googleapis.com
+
+      - name: Authenticate to GCP (service account key)
+        if: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY != '' }}
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+          create_credentials_file: true
+          export_environment_variables: true
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
+          access_token_lifetime: 3600s
+          cleanup_credentials: true
+          universe: googleapis.com
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
