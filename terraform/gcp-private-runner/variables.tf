@@ -1,53 +1,17 @@
+variable "project_id"        { type = string }
+variable "region"            { type = string  default = "asia-south1" }
+variable "zone"              { type = string  default = "asia-south1-a" }
+variable "machine_type"      { type = string  default = "e2-standard-2" }
+variable "tf_state_bucket"   { type = string }
 
-variable "project_id" {
-  type        = string
-  description = "GCP project ID"
-}
+# GitHub details
+variable "repo_owner"        { type = string }   # e.g. "AnugulaSharathKumar"
+variable "repo_name"         { type = string }   # e.g. "Bilvanties_Task-3"
+variable "runner_labels"     { type = list(string) default = ["gcp-gce", "linux"] }
 
-variable "region" {
-  type        = string
-  description = "GCP region (e.g., us-central1)"
-}
+# Secret Manager: name of secret containing your GitHub PAT
+variable "github_pat_secret" { type = string }   # e.g. "github-pat"
 
-variable "zone" {
-  type        = string
-  description = "GCP zone (e.g., us-central1-a)"
-}
-
-variable "instance_name" {
-  type        = string
-  description = "Compute instance name for the self-hosted runner"
-}
-
-variable "machine_type" {
-  type        = string
-  default     = "e2-standard-2"
-  description = "Machine type for the runner VM"
-}
-
-variable "subnetwork" {
-  type        = string
-  description = "Existing subnetwork name (recommended to reuse an existing VPC/subnet)"
-}
-
-variable "startup_script" {
-  type        = string
-  description = "Path to startup.sh that configures the GitHub Actions runner"
-}
-
-variable "github_repo" {
-  type        = string
-  description = "GitHub repo in OWNER/REPO format (e.g., AnugulaSharathKumar/Bilvanties_Task-3)"
-}
-
-variable "runner_token" {
-  type        = string
-  sensitive   = true
-  description = "Short-lived GitHub Actions runner registration token (passed from workflow)"
-}
-
-variable "enable_project_services" {
-  type        = bool
-  default     = false
-  description = "If true, Terraform will enable required GCP services (requires roles/serviceusage.serviceUsageAdmin)."
-}
+# Networking (optional). If you already have a VPC, wire it in here.
+variable "network"           { type = string  default = "default" }
+variable "subnetwork"        { type = string  default = null }
