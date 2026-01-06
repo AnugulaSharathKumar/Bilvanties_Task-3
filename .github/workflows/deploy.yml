@@ -8,59 +8,66 @@ on:
 jobs:
   deploy:
     # ====================================================
-    # STEP A: RUNNER SELECTION
-    # Purpose: GitHub finds ONLINE self-hosted runner
+    # JOB TIMEOUT
+    # Purpose:
+    # - Prevent infinite waiting for runner
+    # - Auto-cancel job if runner not picked or hangs
     # ====================================================
-    runs-on: self-hosted
+    timeout-minutes: 15
+
+    # ====================================================
+    # RUNNER SELECTION
+    # Must match labels registered in startup.sh
+    # ====================================================
+    runs-on: [self-hosted, gcp]
 
     steps:
 
       # ====================================================
-      # STEP B: PIPELINE START CONFIRMATION
+      # STEP 1: PIPELINE START CONFIRMATION
       # ====================================================
-      - name: STEP B - Pipeline Started
+      - name: STEP 1 - Pipeline Started
         run: |
           echo "===================================="
-          echo "$(date) : Pipeline started on runner"
-          hostname
-          whoami
+          echo "$(date) : Pipeline started"
+          echo "Runner Hostname: $(hostname)"
+          echo "Runner User: $(whoami)"
           echo "===================================="
 
 
       # ====================================================
-      # STEP C: CHECKOUT SOURCE CODE
+      # STEP 2: CHECKOUT SOURCE CODE
       # ====================================================
-      - name: STEP C - Checkout Repository
+      - name: STEP 2 - Checkout Repository
         uses: actions/checkout@v4
 
 
       # ====================================================
-      # STEP D: DEPLOY APPLICATION
+      # STEP 3: DEPLOY APPLICATION
       # ====================================================
-      - name: STEP D - Deploy Application
+      - name: STEP 3 - Deploy Application (NGINX)
         run: |
-          echo "$(date) : Deploying application"
+          echo "$(date) : Restarting NGINX"
           sudo systemctl restart nginx
           sudo systemctl status nginx
 
 
       # ====================================================
-      # STEP E: VERIFY APPLICATION
+      # STEP 4: VERIFY APPLICATION
       # ====================================================
-      - name: STEP E - Verify Application
+      - name: STEP 4 - Verify Application
         run: |
-          echo "$(date) : Verifying application"
+          echo "$(date) : Verifying NGINX response"
           curl -I http://localhost
 
 
       # ====================================================
-      # STEP F: SHUTDOWN VM
-      # Purpose: Cost saving – stop runner after job
+      # STEP 5: SHUTDOWN VM (COST SAVING)
       # ====================================================
-      - name: STEP F - Shutdown Runner VM
+      - name: STEP 5 - Shutdown Runner VM
         run: |
           echo "===================================="
-          echo "$(date) : Pipeline completed"
+          echo "$(date) : Pipeline completed successfully"
           echo "$(date) : Shutting down VM"
           echo "===================================="
           sudo shutdown -h now
