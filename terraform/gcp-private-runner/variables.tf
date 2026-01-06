@@ -1,42 +1,53 @@
+
 variable "project_id" {
   type        = string
-  default     = "my-learning-terraform-482905"
-  description = "GCP Project ID where resources will be created"
+  description = "GCP project ID"
 }
+
 variable "region" {
   type        = string
-  default     = "us-central1"
-  description = "GCP Region where resources will be created"
+  description = "GCP region (e.g., us-central1)"
 }
+
 variable "zone" {
   type        = string
-  default     = "us-central1-a"
-  description = "GCP Zone where resources will be created"
+  description = "GCP zone (e.g., us-central1-a)"
 }
-variable "machine_type" {
-  type        = string
-  default     = "e2-micro"
-  description = "Machine type for the private runner instance"
-}
+
 variable "instance_name" {
   type        = string
-  default     = "private-runner-instance"
-  description = "Name of the private runner instance"
+  description = "Compute instance name for the self-hosted runner"
 }
+
+variable "machine_type" {
+  type        = string
+  default     = "e2-standard-2"
+  description = "Machine type for the runner VM"
+}
+
+variable "subnetwork" {
+  type        = string
+  description = "Existing subnetwork name (recommended to reuse an existing VPC/subnet)"
+}
+
+variable "startup_script" {
+  type        = string
+  description = "Path to startup.sh that configures the GitHub Actions runner"
+}
+
 variable "github_repo" {
   type        = string
-  default     = "https://github.com/AnugulaSharathKumar/Bilvanties_Task-3.git"
-  description = "GitHub repository URL for the private runner"
+  description = "GitHub repo in OWNER/REPO format (e.g., AnugulaSharathKumar/Bilvanties_Task-3)"
 }
 
 variable "runner_token" {
   type        = string
-  default     = ""
-  description = "GitHub registration token for the runner (pass at deploy time to avoid committing secrets)"
+  sensitive   = true
+  description = "Short-lived GitHub Actions runner registration token (passed from workflow)"
 }
 
-variable "ssh_source_ranges" {
-  type        = list(string)
-  default     = ["0.0.0.0/0"]
-    description = "List of CIDR blocks allowed to access the instance via SSH"  
+variable "enable_project_services" {
+  type        = bool
+  default     = false
+  description = "If true, Terraform will enable required GCP services (requires roles/serviceusage.serviceUsageAdmin)."
 }

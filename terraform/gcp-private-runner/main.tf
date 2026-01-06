@@ -1,57 +1,40 @@
-resource "google_compute_network" "runner_net" {
-  name                    = "runner-net"
-  auto_create_subnetworks = false
-}
-
-resource "google_compute_subnetwork" "runner_subnet" {
-  name          = "runner-subnet"
-  region        = var.region
-  network       = google_compute_network.runner_net.id
-  ip_cidr_range = "10.10.0.0/24"
-}
-
-resource "google_compute_firewall" "allow_ssh" {
-  name    = "runner-allow-ssh"
-  network = google_compute_network.runner_net.name
-
-  allow {
-    protocol = "tcp"
-    ports    = ["22"]
-  }
-
-  source_ranges = var.ssh_source_ranges
-}
 
 resource "google_compute_instance" "runner" {
   name         = var.instance_name
   zone         = var.zone
   machine_type = var.machine_type
 
+  # Ensure APIs (if toggled) before instance create
+  depends_on = [
+    google_project_service.compute_api,
+    google_project_service.oslogin_api
+  ]
+
   boot_disk {
     initialize_params {
       image = "ubuntu-os-cloud/ubuntu-2204-lts"
-      size  = 10
+      size  = 20
+      type  = "pd-balanced"
     }
   }
 
   network_interface {
-    subnetwork = google_compute_subnetwork.runner_subnet.name
-    access_config {} # public IP for simplicity (remove if using NAT/VPN)
+    subnetwork  = var.subnetwork
+    access_config {} # ephemeral public IP; remove if NAT/VPN
   }
 
-  metadata_startup_script = file("${path.module}/startup.sh")
+  metadata_startup_script = file(var.startup_script)
 
   metadata = {
-    github_url   = var.github_repo
-    runner_token = var.runner_token
+    github_url    = "https://github.com/${var.github_repo}"
+    runner_token  = var.runner_token
+    runner_labels = "self-hosted,linux,private"
   }
 
   scheduling {
-    # For E2 machine types, on_host_maintenance must be "MIGRATE" unless
-    # the instance is preemptible. Change to MIGRATE to avoid the 400 error
-    # or set `scheduling.preemptible = true` if you want TERMINATE behavior.
     automatic_restart   = false
     on_host_maintenance = "MIGRATE"
+    # preemptible = true  # uncomment if you want ephemeral, cheaper runners
   }
 
   tags = ["runner"]
