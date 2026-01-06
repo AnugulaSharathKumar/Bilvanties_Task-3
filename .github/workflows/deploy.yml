@@ -1,4 +1,4 @@
-name: GCP Self Hosted Runner Pipeline
+name: GCP Self Hosted Runner Pipeline (With Logs)
 
 on:
   push:
@@ -10,14 +10,40 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Deploy Application (NGINX)
+      - name: 📥 Checkout Repository
         run: |
-          echo "Deploying application..."
+          echo "=============================="
+          echo "$(date) : Checking out repository"
+          echo "=============================="
+          git --version
+          pwd
+          ls -la
+
+      - name: 🚀 Application Deployment (NGINX)
+        run: |
+          echo "=============================="
+          echo "$(date) : Starting application deployment"
+          echo "=============================="
+
+          sudo systemctl status nginx || true
           sudo systemctl restart nginx
+          sudo systemctl status nginx
 
-      - name: Stop GCP Runner VM
+          echo "$(date) : ✅ NGINX restarted successfully"
+
+      - name: 📊 Verify Application
         run: |
+          echo "=============================="
+          echo "$(date) : Verifying application response"
+          echo "=============================="
+
+          curl -v http://localhost || echo "NGINX not responding"
+
+      - name: 🛑 Stop Self-Hosted Runner VM
+        run: |
+          echo "=============================="
+          echo "$(date) : Pipeline completed"
+          echo "$(date) : Shutting down VM"
+          echo "=============================="
+
           sudo shutdown -h now
