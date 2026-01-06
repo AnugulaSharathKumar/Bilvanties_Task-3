@@ -1,4 +1,4 @@
-name: GCP Self Hosted Runner Pipeline (With Logs)
+name: GCP Self Hosted Runner – Full Lifecycle
 
 on:
   push:
@@ -7,43 +7,60 @@ on:
 
 jobs:
   deploy:
+    # ====================================================
+    # STEP A: RUNNER SELECTION
+    # Purpose: GitHub finds ONLINE self-hosted runner
+    # ====================================================
     runs-on: self-hosted
 
     steps:
-      - name: 📥 Checkout Repository
-        run: |
-          echo "=============================="
-          echo "$(date) : Checking out repository"
-          echo "=============================="
-          git --version
-          pwd
-          ls -la
 
-      - name: 🚀 Application Deployment (NGINX)
+      # ====================================================
+      # STEP B: PIPELINE START CONFIRMATION
+      # ====================================================
+      - name: STEP B - Pipeline Started
         run: |
-          echo "=============================="
-          echo "$(date) : Starting application deployment"
-          echo "=============================="
+          echo "===================================="
+          echo "$(date) : Pipeline started on runner"
+          hostname
+          whoami
+          echo "===================================="
 
-          sudo systemctl status nginx || true
+
+      # ====================================================
+      # STEP C: CHECKOUT SOURCE CODE
+      # ====================================================
+      - name: STEP C - Checkout Repository
+        uses: actions/checkout@v4
+
+
+      # ====================================================
+      # STEP D: DEPLOY APPLICATION
+      # ====================================================
+      - name: STEP D - Deploy Application
+        run: |
+          echo "$(date) : Deploying application"
           sudo systemctl restart nginx
           sudo systemctl status nginx
 
-          echo "$(date) : ✅ NGINX restarted successfully"
 
-      - name: 📊 Verify Application
+      # ====================================================
+      # STEP E: VERIFY APPLICATION
+      # ====================================================
+      - name: STEP E - Verify Application
         run: |
-          echo "=============================="
-          echo "$(date) : Verifying application response"
-          echo "=============================="
+          echo "$(date) : Verifying application"
+          curl -I http://localhost
 
-          curl -v http://localhost || echo "NGINX not responding"
 
-      - name: 🛑 Stop Self-Hosted Runner VM
+      # ====================================================
+      # STEP F: SHUTDOWN VM
+      # Purpose: Cost saving – stop runner after job
+      # ====================================================
+      - name: STEP F - Shutdown Runner VM
         run: |
-          echo "=============================="
+          echo "===================================="
           echo "$(date) : Pipeline completed"
           echo "$(date) : Shutting down VM"
-          echo "=============================="
-
+          echo "===================================="
           sudo shutdown -h now
