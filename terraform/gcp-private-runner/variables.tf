@@ -15,3 +15,7 @@ variable "github_pat_secret" { type = string }   # e.g. "github-pat"
 # Networking (optional). If you already have a VPC, wire it in here.
 variable "network"           { type = string  default = "default" }
 variable "subnetwork"        { type = string  default = null }
+
+# Instance and module options
+variable "instance_name"     { type = string  default = "private-runner-instance" }
+variable "enable_project_services" { type = bool default = false }

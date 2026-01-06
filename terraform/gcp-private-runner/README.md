@@ -27,8 +27,9 @@ Notes:
 How to run jobs on this ephemeral runner
 ---------------------------------------
 1) Add repository secrets:
-   - `GCP_SA_KEY` – JSON key for a GCP service account with permission to start the VM (e.g. `roles/compute.instanceAdmin.v1` or a more limited role that includes `compute.instances.start` and `compute.instances.addMetadata`).
+   - `GCP_SERVICE_ACCOUNT_KEY` – JSON key for a GCP service account with permission to start/stop the VM (e.g. `roles/compute.instanceAdmin.v1` or a more limited role that includes `compute.instances.start`, `compute.instances.stop`, and `compute.instances.addMetadata`).
    - `GCP_PROJECT_ID` – the target GCP project id used by the workflow.
+   - (Optional) Store a GitHub Personal Access Token in Secret Manager and pass its secret name via the module input `github_pat_secret` if you want the VM to fetch a PAT directly; otherwise the workflow will request a short-lived registration token and write it to the instance metadata.
 
 2) Example workflow: `.github/workflows/start-runner-and-execute.yml` (added to this repo) starts the instance with a fresh registration token and then runs the job on `runs-on: [self-hosted, linux, private]`. The instance's `startup.sh` registers an ephemeral runner that automatically unregisters after doing one job and then shuts the VM down.
 

@@ -14,13 +14,13 @@ provider "google" {
 }
 
 locals {
-  # === EDIT THESE ===
-  project_id  = "YOUR_GCP_PROJECT_ID"
-  org_or_user = "AnugulaSharathKumar"         # GitHub org or username
-  repo_name   = "Bilvanties_Task-3"           # Repo name
+  # Use variables from module inputs
+  project_id  = var.project_id
+  org_or_user = var.repo_owner
+  repo_name   = var.repo_name
 
   # Service Account the workflow will impersonate
-  sa_id       = "gh-actions"                   # will become gh-actions@PROJECT.iam.gserviceaccount.com
+  sa_id       = "gh-actions"
 
   # Names for pool & provider
   pool_id     = "github-actions"
@@ -30,9 +30,8 @@ locals {
   sa_roles = [
     "roles/storage.admin",
     "roles/compute.admin",
-    # add any other roles your workflow needs
   ]
-}
+} 
 
 # Enable IAM API (if not already)
 resource "google_project_service" "iam" {
@@ -98,3 +97,54 @@ resource "google_service_account_iam_member" "wif_binding" {
 
 data "google_project" "project" {
   project_id = local.project_id
+}
+
+# Service account used by the ephemeral runner instance (can access Secret Manager)
+resource "google_service_account" "runner_sa" {
+  account_id   = "${var.instance_name}-sa"
+  display_name = "GitHub Runner service account"
+}
+
+# Grant the runner SA permission to access secrets in Secret Manager.
+# This is a broad permission (project-level). If you'd like a more restricted binding
+# we can switch to `google_secret_manager_secret_iam_member` bound to a single secret.
+resource "google_project_iam_member" "runner_sa_secret_accessor" {
+  project = var.project_id
+  role    = "roles/secretmanager.secretAccessor"
+  member  = "serviceAccount:${google_service_account.runner_sa.email}"
+}
+
+# Compute instance for the ephemeral self-hosted runner
+resource "google_compute_instance" "runner" {
+  name         = var.instance_name
+  zone         = var.zone
+  machine_type = var.machine_type
+
+  boot_disk {
+    initialize_params {
+      image = "projects/ubuntu-os-cloud/global/images/family/ubuntu-2204-lts"
+    }
+  }
+
+  network_interface {
+    network    = var.network
+    subnetwork = var.subnetwork
+    access_config {}
+  }
+
+  metadata = {
+    repo_owner      = var.repo_owner
+    repo_name       = var.repo_name
+    runner_labels   = join(",", var.runner_labels)
+    pat_secret_name = var.github_pat_secret
+  }
+
+  metadata_startup_script = file("${path.module}/startup.sh")
+
+  service_account {
+    email  = google_service_account.runner_sa.email
+    scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+  }
+
+  tags = ["github-runner"]
+}

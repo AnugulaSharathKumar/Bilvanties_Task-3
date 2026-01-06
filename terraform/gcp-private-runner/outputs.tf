@@ -11,5 +11,5 @@ output "zone" {
 
 output "github_url" {
   description = "GitHub repository URL used by the runner"
-  value       = "https://github.com/${var.github_repo}"
+  value       = "https://github.com/${var.repo_owner}/${var.repo_name}"
 }
