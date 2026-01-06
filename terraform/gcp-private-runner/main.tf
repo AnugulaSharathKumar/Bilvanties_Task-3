@@ -1,96 +1,100 @@
-provider "google" {
-  project = var.project_id
-  region  = var.region
-  zone    = var.zone
-}
 
-# Enable APIs we need
-
-resource "google_project_service" "compute" {
-  project = var.project_id
-  service = "compute.googleapis.com"
-}
-
-resource "google_project_service" "secretmanager" {
-  project = var.project_id
-  service = "secretmanager.googleapis.com"
-}
-
-# Service Account for the VM
-resource "google_service_account" "runner_sa" {
-  account_id   = "gh-runner-sa"
-  display_name = "GitHub Runner SA"
-}
-
-# Allow VM to read Secret Manager, use Compute
-resource "google_project_iam_binding" "sm_access" {
-  project = var.project_id
-  role    = "roles/secretmanager.secretAccessor"
-  members = ["serviceAccount:${google_service_account.runner_sa.email}"]
-}
-
-resource "google_project_iam_binding" "compute_user" {
-  project = var.project_id
-  role    = "roles/compute.instanceAdmin.v1"
-  members = ["serviceAccount:${google_service_account.runner_sa.email}"]
-}
-
-# Optional: minimalist firewall to allow SSH from IAP for debug (comment out if not needed)
-resource "google_compute_firewall" "allow_iap_ssh" {
-  name    = "allow-iap-ssh"
-  network = var.network
-
-  allow {
-    protocol = "tcp"
-    ports    = ["22"]
-  }
-
-  source_ranges = ["35.235.240.0/20"] # IAP TCP forwarding
-  direction     = "INGRESS"
-}
-
-# Random suffix for unique VM names
-resource "random_id" "suffix" { byte_length = 3 }
-
-# Instance with startup script that registers ephemeral runner
-resource "google_compute_instance" "ephemeral_runner" {
-  name         = "gh-runner-${random_id.suffix.hex}"
-  machine_type = var.machine_type
-  zone         = var.zone
-
-  boot_disk {
-    initialize_params {
-      image = "projects/debian-cloud/global/images/family/debian-12"
-      size  = 20
+terraform {
+  required_version = ">= 1.5.0"
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = "~> 5.0"
     }
   }
-
-  network_interface {
-    network    = var.network
-    subnetwork = var.subnetwork
-    # ephemeral public IP (remove if you only use IAP/Private NAT)
-    access_config {}
-  }
-
-  service_account {
-    email  = google_service_account.runner_sa.email
-    scopes = ["https://www.googleapis.com/auth/cloud-platform"]
-  }
-
-  metadata = {
-    # Pass values to startup script as metadata
-    repo_owner      = var.repo_owner
-    repo_name       = var.repo_name
-    runner_labels   = join(",", var.runner_labels)
-    pat_secret_name = var.github_pat_secret
-  }
-
-  metadata_startup_script = file("${path.module}/startup.sh")
-
-  tags = ["gh-runner"]
 }
 
-# Output the label we expect, so workflow can target it
-output "runner_labels" {
-  value = var.runner_labels
+provider "google" {
+  project = local.project_id
 }
+
+locals {
+  # === EDIT THESE ===
+  project_id  = "YOUR_GCP_PROJECT_ID"
+  org_or_user = "AnugulaSharathKumar"         # GitHub org or username
+  repo_name   = "Bilvanties_Task-3"           # Repo name
+
+  # Service Account the workflow will impersonate
+  sa_id       = "gh-actions"                   # will become gh-actions@PROJECT.iam.gserviceaccount.com
+
+  # Names for pool & provider
+  pool_id     = "github-actions"
+  provider_id = "github-oidc"
+
+  # Optional roles for the SA (add/remove as needed)
+  sa_roles = [
+    "roles/storage.admin",
+    "roles/compute.admin",
+    # add any other roles your workflow needs
+  ]
+}
+
+# Enable IAM API (if not already)
+resource "google_project_service" "iam" {
+  project = local.project_id
+  service = "iam.googleapis.com"
+}
+
+# Create service account to be impersonated by GitHub Actions
+resource "google_service_account" "gh_sa" {
+  account_id   = local.sa_id
+  display_name = "GitHub Actions OIDC SA"
+}
+
+# Assign roles to the service account (so the workload can do things)
+resource "google_project_iam_member" "sa_iam_roles" {
+  for_each = toset(local.sa_roles)
+  project  = local.project_id
+  role     = each.value
+  member   = "serviceAccount:${google_service_account.gh_sa.email}"
+}
+
+# Create Workload Identity Pool
+resource "google_iam_workload_identity_pool" "pool" {
+  project                         = local.project_id
+  workload_identity_pool_id       = local.pool_id
+  display_name                    = "GitHub Actions Pool"
+  description                     = "Keyless auth for GitHub Actions → GCP"
+}
+
+# Create OIDC Provider for GitHub Actions (issuer = token.actions.githubusercontent.com)
+resource "google_iam_workload_identity_pool_provider" "provider" {
+  project                             = local.project_id
+  workload_identity_pool_id           = google_iam_workload_identity_pool.pool.workload_identity_pool_id
+  workload_identity_pool_provider_id  = local.provider_id
+  display_name                        = "GitHub OIDC Provider"
+
+  # Map GitHub OIDC claims to attributes you can use in IAM bindings
+  attribute_mapping = {
+    "google.subject"             = "assertion.sub"
+    "attribute.actor"            = "assertion.actor"
+    "attribute.repository"       = "assertion.repository"
+    "attribute.repository_owner" = "assertion.repository_owner"
+  }
+
+  # Restrict to a specific repo (tightest scope):
+  # Only tokens from repo owner/repo_name are trusted.
+  attribute_condition = "assertion.repository == '${local.org_or_user}/${local.repo_name}'"
+
+  oidc {
+    issuer_uri        = "https://token.actions.githubusercontent.com"
+    # No fixed audience required for google-github-actions/auth
+    allowed_audiences = []
+  }
+}
+
+# Allow identities from this provider/pool to impersonate the SA
+# principalSet pattern binds based on attribute mappings above.
+resource "google_service_account_iam_member" "wif_binding" {
+  service_account_id = google_service_account.gh_sa.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/projects/${data.google_project.project.number}/locations/global/workloadIdentityPools/${google_iam_workload_identity_pool.pool.workload_identity_pool_id}/attribute.repository/${local.org_or_user}/${local.repo_name}"
+}
+
+data "google_project" "project" {
+  project_id = local.project_id

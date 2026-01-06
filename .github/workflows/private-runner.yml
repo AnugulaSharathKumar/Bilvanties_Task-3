@@ -1,90 +1,126 @@
 
-name: Ephemeral GCP GitHub Runner
+name: GCP OIDC Auth & Ephemeral Runner Provision
 
 on:
-  workflow_dispatch:
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 permissions:
   contents: read
-  id-token: write   # for OIDC to GCP
-  actions: read
+  id-token: write  # REQUIRED for OIDC
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
 
 jobs:
-  provision:
+  authenticate:
+    name: Authenticate to GCP using OIDC
     runs-on: ubuntu-latest
-    outputs:
-      labels: ${{ steps.tf.outputs.runner_labels }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # Auth to Google Cloud via OIDC Workload Identity Federation
+      - name: Authenticate to GCP (OIDC)
+        uses: google-github-actions/auth@v2
+        with:
+          # MUST specify exactly one of the below, we use WIF:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_ID_PROVIDER }}  # e.g. projects/123456789/locations/global/workloadIdentityPools/github-actions/providers/github-oidc
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}            # e.g. gh-actions@YOUR_PROJECT_ID.iam.gserviceaccount.com
+
+          # helpful options
+          create_credentials_file: true
+          export_environment_variables: true
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
+          access_token_lifetime: 3600s
+          cleanup_credentials: true
+          universe: googleapis.com
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Verify auth
+        run: |
+          gcloud info
+          gcloud projects describe "${GCP_PROJECT_ID}"
+
+  # (Optional) Provision your ephemeral runner VM via Terraform
+  provision:
+    name: Provision Ephemeral GCE Runner
+    runs-on: ubuntu-latest
+    needs: authenticate
+
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Authenticate to GCP (OIDC)
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_ID_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+          create_credentials_file: true
+          export_environment_variables: true
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
 
-      - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Set up Terraform
+      - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-      - name: Terraform Init
+      - name: Terraform init
         working-directory: infra/gcp-runner
         env:
           TF_VAR_tf_state_bucket: ${{ secrets.GCS_TF_STATE_BUCKET }}
         run: terraform init
 
-      - name: Terraform Apply (create runner VM)
-        id: tf
+      - name: Terraform apply (create VM)
+        id: tfapply
         working-directory: infra/gcp-runner
         env:
           TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
           TF_VAR_region: "asia-south1"
           TF_VAR_zone: "asia-south1-a"
-          TF_VAR_repo_owner: "AnugulaSharathKumar"   # <-- update if needed
-          TF_VAR_repo_name: "Bilvanties_Task-3"     # <-- update if needed
-          TF_VAR_github_pat_secret: ${{ secrets.GITHUB_PAT_SECRET_NAME }}
+          TF_VAR_repo_owner: "AnugulaSharathKumar"
+          TF_VAR_repo_name: "Bilvanties_Task-3"
+          TF_VAR_github_pat_secret: ${{ secrets.GITHUB_PAT_SECRET_NAME }} # Secret Manager name holding PAT (startup grabs registration token)
           TF_VAR_tf_state_bucket: ${{ secrets.GCS_TF_STATE_BUCKET }}
         run: |
           terraform apply -auto-approve
-          # expose labels to downstream job
-          echo "runner_labels=$(terraform output -json runner_labels)" >> $GITHUB_OUTPUT
+          echo "labels=$(terraform output -json runner_labels)" >> $GITHUB_OUTPUT
 
+  # Your job that uses the ephemeral runner
   build:
+    name: Run on self-hosted ephemeral runner
     needs: provision
-    runs-on: [ self-hosted, gcp-gce, linux ]   # matches startup.sh labels
+    runs-on: [ self-hosted, gcp-gce, linux ]  # must match labels in startup.sh
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      # Your actual workflow steps go here
-      - name: Show runner info
-        run: |
+      - uses: actions/checkout@v4
+      - run: |
+          echo "Hello from ephemeral runner"
           uname -a
-          echo "Labels: ${{ needs.provision.outputs.labels }}"
 
+  # Always clean up the VM (even on failure)
   cleanup:
-    needs: [ provision, build ]
+    name: Destroy runner VM
+    needs: [ authenticate, provision, build ]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Authenticate to GCP (OIDC)
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_ID_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+          create_credentials_file: true
+          export_environment_variables: true
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
 
-      - name: Set up Terraform
+      - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-      - name: Terraform Destroy (delete runner VM)
+      - name: Terraform destroy
         working-directory: infra/gcp-runner
         env:
           TF_VAR_tf_state_bucket: ${{ secrets.GCS_TF_STATE_BUCKET }}
