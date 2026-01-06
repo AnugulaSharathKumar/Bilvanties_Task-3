@@ -1,31 +1,32 @@
 
-#!/usr/bin/env bash
 set -euo pipefail
+echo "Requesting registration token for ${{ github.repository }}"
 
-# Read instance metadata (GCE)
-MD_HEADER="Metadata-Flavor: Google"
-GITHUB_URL=$(curl -fsS -H "$MD_HEADER" http://metadata.google.internal/computeMetadata/v1/instance/attributes/github_url)
-RUNNER_TOKEN=$(curl -fsS -H "$MD_HEADER" http://metadata.google.internal/computeMetadata/v1/instance/attributes/runner_token)
-RUNNER_LABELS=$(curl -fsS -H "$MD_HEADER" http://metadata.google.internal/computeMetadata/v1/instance/attributes/runner_labels)
+# Ensure token is present
+: "${GH_TOKEN:?GH_TOKEN is not set}"
 
-# Install dependencies
-sudo apt-get update -y
-sudo apt-get install -y curl jq
+# Call the API with proper headers
+HTTP_BODY=$(curl -sS -X POST \
+  -H "Accept: application/vnd.github+json" \
+  -H "Authorization: Bearer ${GH_TOKEN}" \
+  -H "X-GitHub-Api-Version: 2022-11-28" \
+  "https://api.github.com/repos/${{ github.repository }}/actions/runners/registration-token" \
+  -w "\n%{http_code}")
 
-# Download actions runner
-cd /opt
-sudo mkdir -p actions-runner && sudo chown "$(whoami)":"$(whoami)" actions-runner
-cd actions-runner
-curl -L -o runner.tar.gz https://github.com/actions/runner/releases/latest/download/actions-runner-linux-x64.tar.gz
-tar xzf runner.tar.gz
+HTTP_CODE=$(echo "$HTTP_BODY" | tail -n1)
+TOKEN_JSON=$(echo "$HTTP_BODY" | sed '$d')  # body without status code
 
-# Configure and start
-./config.sh \
-  --url "${GITHUB_URL}" \
-  --token "${RUNNER_TOKEN}" \
-  --name "$(hostname)" \
-  --labels "${RUNNER_LABELS}" \
-  --unattended
+if [ "$HTTP_CODE" != "201" ]; then
+  echo "Failed to get registration token (HTTP $HTTP_CODE)" >&2
+  echo "Response: $TOKEN_JSON" >&2
+  exit 1
+fi
 
-sudo ./svc.sh install
-sudo ./svc.sh start
+REG_TOKEN=$(echo "$TOKEN_JSON" | jq -r '.token')
+if [ -z "$REG_TOKEN" ] || [ "$REG_TOKEN" = "null" ]; then
+  echo "Registration token missing in response" >&2
+  echo "Response: $TOKEN_JSON" >&2
+  exit 1
+fi
+
+echo "token=$REG_TOKEN" >> "$GITHUB_OUTPUT"
