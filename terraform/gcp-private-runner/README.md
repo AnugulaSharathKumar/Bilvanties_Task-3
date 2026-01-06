@@ -35,6 +35,8 @@ How to run jobs on this ephemeral runner
 3) Job flow details:
    - `start-runner` job (hosted runner) requests a registration token from GitHub Actions API and injects it into the instance metadata.
    - The instance retrieves `runner_token` and `github_url` metadata at boot (your `startup.sh` already does this), registers as an ephemeral runner and runs `./run.sh`.
+
+> Note: `startup.sh` now installs Actions Runner v2.330.0 and validates the tarball SHA256. Prefer passing the registration token via `var.runner_token` or instance metadata instead of hard-coding it in the script.
    - After the runner finishes the single job, the startup script calls `shutdown -h now` to stop the VM.
 
 4) If you want Terraform to manage enabling the Compute API automatically, set `enable_project_services = true` in your module call and run `terraform apply` with a principal that has `roles/serviceusage.serviceUsageAdmin`.

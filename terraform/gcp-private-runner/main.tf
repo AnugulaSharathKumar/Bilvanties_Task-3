@@ -43,7 +43,7 @@ resource "google_compute_instance" "runner" {
 
   metadata = {
     github_url   = var.github_repo
-    runner_token = "will-be-overwritten-by-pipeline"
+    runner_token = var.runner_token
   }
 
   scheduling {

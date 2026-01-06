@@ -28,6 +28,13 @@ variable "github_repo" {
   default     = "https://github.com/AnugulaSharathKumar/Bilvanties_Task-3.git"
   description = "GitHub repository URL for the private runner"
 }
+
+variable "runner_token" {
+  type        = string
+  default     = ""
+  description = "GitHub registration token for the runner (pass at deploy time to avoid committing secrets)"
+}
+
 variable "ssh_source_ranges" {
   type        = list(string)
   default     = ["0.0.0.0/0"]
